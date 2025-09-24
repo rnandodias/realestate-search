@@ -1,5 +1,12 @@
 # RealEstate Search — Passo 1
 
+## Subindo Alterações
+git add -A
+git commit -m "Testando GitHub Actions"
+git push
+
+---
+
 Infra mínima: Qdrant + Search Service (FastAPI) + CI/CD (GitHub Actions -> VPS via SSH).
 
 ## Pré-requisitos na VPS (apenas 1x)

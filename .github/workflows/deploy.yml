@@ -22,8 +22,9 @@ jobs:
           target: "/opt/realestate-search"
           rm: true
           overwrite: true
-          # ignore .git and GH files on server
-          exclude: ".git, .github/.DS_Store"
+          # Dica: esta action não aceita 'exclude'. Se quiser evitar copiar .git/.github,
+          # faça a limpeza no servidor ou crie um .scpignore (não suportado oficialmente).
+          # Alternativa: use 'easingthemes/ssh-deploy' ou rsync.
 
       - name: Remote deploy (docker compose up)
         uses: appleboy/ssh-action@v1.0.3
@@ -35,17 +36,17 @@ jobs:
           script: |
             set -e
             cd /opt/realestate-search
-            # Garante docker e compose plugin
+            # (Opcional) limpeza se .git/.github tiverem sido copiados
+            rm -rf .git .github/.DS_Store || true
             if ! command -v docker >/dev/null 2>&1; then
               curl -fsSL https://get.docker.com | sh
             fi
             if ! docker compose version >/dev/null 2>&1; then
               apt-get update && apt-get install -y docker-compose-plugin || true
             fi
-            # Mantém .env local (não subimos pelo GitHub)
             if [ ! -f .env ]; then
               cp .env.example .env
-              echo "[WARN] .env criado a partir do exemplo. Preencha variáveis antes de subir serviços reais." >&2
+              echo "[WARN] .env criado a partir do exemplo. Preencha variáveis e re-subir." >&2
             fi
             docker compose pull || true
             docker compose up -d --build
