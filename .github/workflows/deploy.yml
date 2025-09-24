@@ -1,0 +1,52 @@
+name: Deploy to VPS (Hostinger)
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload files to VPS via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "."
+          target: "/opt/realestate-search"
+          rm: true
+          overwrite: true
+          # ignore .git and GH files on server
+          exclude: ".git, .github/.DS_Store"
+
+      - name: Remote deploy (docker compose up)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/realestate-search
+            # Garante docker e compose plugin
+            if ! command -v docker >/dev/null 2>&1; then
+              curl -fsSL https://get.docker.com | sh
+            fi
+            if ! docker compose version >/dev/null 2>&1; then
+              apt-get update && apt-get install -y docker-compose-plugin || true
+            fi
+            # Mantém .env local (não subimos pelo GitHub)
+            if [ ! -f .env ]; then
+              cp .env.example .env
+              echo "[WARN] .env criado a partir do exemplo. Preencha variáveis antes de subir serviços reais." >&2
+            fi
+            docker compose pull || true
+            docker compose up -d --build
+            docker ps --format '{{.Names}} -> {{.Status}}'

@@ -1,0 +1,10 @@
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+
+# Local-only files (não commitar secrets)
+.env
