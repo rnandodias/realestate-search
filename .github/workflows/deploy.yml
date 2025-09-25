@@ -33,10 +33,8 @@ jobs:
           script: |
             set -e
             cd /opt/realestate-search
-            # limpeza opcional
             rm -rf .git .github/.DS_Store || true
 
-            # instala docker e compose se faltar
             if ! command -v docker >/dev/null 2>&1; then
               curl -fsSL https://get.docker.com | sh
             fi
@@ -44,26 +42,29 @@ jobs:
               apt-get update && apt-get install -y docker-compose-plugin || true
             fi
 
-            # monta .env a partir dos secrets do GitHub Actions
-            cat > .env <<'EOF'
-            OPENAI_API_KEY=${OPENAI_API_KEY}
-            EMBEDDING_MODEL=${EMBEDDING_MODEL}
-            VECTOR_SIZE=${VECTOR_SIZE}
+            # === Sanity check dos secrets ===
+            required=(OPENAI_API_KEY EMBEDDING_MODEL VECTOR_SIZE QDRANT_URL QDRANT_COLLECTION DOCDB_URI DB_NAME COLLECTION_NAME VECTOR_DB_URL)
+            for v in "${required[@]}"; do
+              if [ -z "${!v}" ]; then
+                echo "[ERRO] Secret $v não definido no GitHub Actions." >&2
+                exit 1
+              fi
+            done
 
-            # Qdrant (interno via docker network)
-            QDRANT_URL=${QDRANT_URL}
-            QDRANT_COLLECTION=${QDRANT_COLLECTION}
+            # === Gera .env com valores EXPANDIDOS (sem quotes no EOF!) ===
+            cat > .env <<EOF
+OPENAI_API_KEY=${OPENAI_API_KEY}
+EMBEDDING_MODEL=${EMBEDDING_MODEL}
+VECTOR_SIZE=${VECTOR_SIZE}
+QDRANT_URL=${QDRANT_URL}
+QDRANT_COLLECTION=${QDRANT_COLLECTION}
+DOCDB_URI=${DOCDB_URI}
+DB_NAME=${DB_NAME}
+COLLECTION_NAME=${COLLECTION_NAME}
+VECTOR_DB_URL=${VECTOR_DB_URL}
+EOF
 
-            # ETL / DocumentDB
-            DOCDB_URI=${DOCDB_URI}
-            DB_NAME=${DB_NAME}
-            COLLECTION_NAME=${COLLECTION_NAME}
-
-            # Acesso HTTP local ao Qdrant (para ETL)
-            VECTOR_DB_URL=${VECTOR_DB_URL}
-            EOF
-
-            # login no Docker Hub para evitar rate limit (opcional, só se secrets existirem)
+            # Login no Docker Hub (evita rate limit)
             if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
               echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || true
             fi
@@ -71,7 +72,6 @@ jobs:
             docker compose up -d --build
             docker ps --format '{{.Names}} -> {{.Status}}'
         env:
-          # === App/Infra secrets ===
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
           VECTOR_SIZE: ${{ secrets.VECTOR_SIZE }}
@@ -81,6 +81,5 @@ jobs:
           DB_NAME: ${{ secrets.DB_NAME }}
           COLLECTION_NAME: ${{ secrets.COLLECTION_NAME }}
           VECTOR_DB_URL: ${{ secrets.VECTOR_DB_URL }}
-          # === Docker Hub (opcional) ===
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
