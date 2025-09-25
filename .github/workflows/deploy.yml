@@ -30,9 +30,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           port: ${{ secrets.VPS_PORT }}
           key: ${{ secrets.VPS_SSH_KEY }}
-
           envs: OPENAI_API_KEY,EMBEDDING_MODEL,VECTOR_SIZE,QDRANT_URL,QDRANT_COLLECTION,DOCDB_URI,DB_NAME,COLLECTION_NAME,VECTOR_DB_URL,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
-
           script: |
             set -e
             cd /opt/realestate-search
@@ -54,7 +52,7 @@ jobs:
               fi
             done
 
-            # === Gera .env com valores EXPANDIDOS (sem quotes no EOF!) ===
+            # === Gera .env com valores EXPANDIDOS ===
             cat > .env <<EOF
             OPENAI_API_KEY=${OPENAI_API_KEY}
             EMBEDDING_MODEL=${EMBEDDING_MODEL}
@@ -67,7 +65,10 @@ jobs:
             VECTOR_DB_URL=${VECTOR_DB_URL}
             EOF
 
-            # # Login no Docker Hub (evita rate limit)
+            # Pre-pull com fallback: GHCR primeiro; se falhar, tenta Docker Hub
+            docker pull ghcr.io/qdrant/qdrant:v1.11.0 || docker pull qdrant/qdrant:v1.11.0 || true
+
+            # # Login no Docker Hub (opcional, só se houver secrets) — útil se fallback precisar
             # if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
             #   echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || true
             # fi
