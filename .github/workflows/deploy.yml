@@ -68,10 +68,10 @@ jobs:
             # Pre-pull com fallback: GHCR primeiro; se falhar, tenta Docker Hub
             docker pull ghcr.io/qdrant/qdrant:v1.11.0 || docker pull qdrant/qdrant:v1.11.0 || true
 
-            # # Login no Docker Hub (opcional, só se houver secrets) — útil se fallback precisar
-            # if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
-            #   echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || true
-            # fi
+            # Login no Docker Hub (opcional, só se houver secrets) — útil se fallback precisar
+            if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+              echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || true
+            fi
 
             docker compose up -d --build
             docker ps --format '{{.Names}} -> {{.Status}}'
