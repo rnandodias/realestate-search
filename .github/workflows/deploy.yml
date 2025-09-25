@@ -67,10 +67,10 @@ jobs:
             VECTOR_DB_URL=${VECTOR_DB_URL}
             EOF
 
-            # Login no Docker Hub (evita rate limit)
-            if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
-              echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || true
-            fi
+            # # Login no Docker Hub (evita rate limit)
+            # if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            #   echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || true
+            # fi
 
             docker compose up -d --build
             docker ps --format '{{.Names}} -> {{.Status}}'
