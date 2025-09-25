@@ -53,16 +53,16 @@ jobs:
 
             # === Gera .env com valores EXPANDIDOS (sem quotes no EOF!) ===
             cat > .env <<EOF
-OPENAI_API_KEY=${OPENAI_API_KEY}
-EMBEDDING_MODEL=${EMBEDDING_MODEL}
-VECTOR_SIZE=${VECTOR_SIZE}
-QDRANT_URL=${QDRANT_URL}
-QDRANT_COLLECTION=${QDRANT_COLLECTION}
-DOCDB_URI=${DOCDB_URI}
-DB_NAME=${DB_NAME}
-COLLECTION_NAME=${COLLECTION_NAME}
-VECTOR_DB_URL=${VECTOR_DB_URL}
-EOF
+            OPENAI_API_KEY=${OPENAI_API_KEY}
+            EMBEDDING_MODEL=${EMBEDDING_MODEL}
+            VECTOR_SIZE=${VECTOR_SIZE}
+            QDRANT_URL=${QDRANT_URL}
+            QDRANT_COLLECTION=${QDRANT_COLLECTION}
+            DOCDB_URI=${DOCDB_URI}
+            DB_NAME=${DB_NAME}
+            COLLECTION_NAME=${COLLECTION_NAME}
+            VECTOR_DB_URL=${VECTOR_DB_URL}
+            EOF
 
             # Login no Docker Hub (evita rate limit)
             if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
