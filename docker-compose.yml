@@ -1,6 +1,6 @@
 services:
   qdrant:
-    image: ghcr.io/qdrant/qdrant:v1.11.0
+    image: qdrant/qdrant:v1.11.0  # usar Docker Hub (tag existente)
     restart: unless-stopped
     ports:
       - "127.0.0.1:6333:6333"
