@@ -5,15 +5,19 @@ from qdrant_client.http import models as qm
 QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
 COLLECTION = os.getenv("QDRANT_COLLECTION", "imoveis_v1")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "3072"))  # compat c/ text-embedding-3-large
-DISTANCE = os.getenv("VECTOR_DISTANCE", "Cosine")
+# Normaliza DISTANCE para enum do Qdrant (COSINE|EUCLID|DOT)
+DISTANCE_ENV = os.getenv("VECTOR_DISTANCE", "COSINE").upper()
+if DISTANCE_ENV not in {"COSINE", "EUCLID", "DOT"}:
+    DISTANCE_ENV = "COSINE"
 
 client = QdrantClient(url=QDRANT_URL)
 
 def ensure_collection():
+    # Cria coleção se não existir (idempotente)
     if COLLECTION not in [c.name for c in client.get_collections().collections]:
         client.create_collection(
             collection_name=COLLECTION,
-            vectors_config=qm.VectorParams(size=VECTOR_SIZE, distance=getattr(qm.Distance, DISTANCE))
+            vectors_config=qm.VectorParams(size=VECTOR_SIZE, distance=qm.Distance[DISTANCE_ENV])
         )
 
 
