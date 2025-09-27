@@ -19,5 +19,15 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
 
+    networks:
+      n8n_net:
+        aliases: [search-service]
+    restart: always
+
+networks:
+  n8n_net:
+    external: true
+    name: root_default  # REDE_EXISTENTE preenchida
+
 volumes:
   qdrant_data:
