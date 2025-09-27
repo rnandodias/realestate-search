@@ -1,9 +1,10 @@
-## Subindo Alterações
+# Subindo Alterações
+```bash
 git add -A
-git commit -m "Adicionando MongoDB Atlas no processo"
+git commit -m "Atualizando o processo do Qdrant"
 git push
 
----
+```
 
 # RealEstate Search — Passo 1 (Atlas)
 
@@ -12,7 +13,37 @@ git push
 - **Batching**: tamanho padrão `BATCH_UPSERT=128` (pode ajustar via `.env`).
 - **Custo/latência**: se quiser reduzir, troque `EMBEDDING_MODEL` para `text-embedding-3-small` e `VECTOR_SIZE=1536`.
 
-## Busca — corpo de requisição (schema Rodrigo)
+# ETL — Como rodar
+
+```bash
+cd /opt/realestate-search
+
+# (opcional) limpar a coleção no Qdrant
+export RESET_QDRANT=true
+
+# pending = só quem não tem embedding
+export MODE=pending
+
+# amostra (opcional)
+export SAMPLE_SIZE=5000
+
+# lotes
+export BATCH_EMBED=32
+export BATCH_UPSERT=128
+
+docker run --rm -it \
+  -v /opt/realestate-search:/work -w /work \
+  --network host python:3.11 \
+  bash -lc "pip install -r etl/requirements.txt && python etl/etl_embeddings.py"
+
+# Outros modos
+# MODE=updated   -> reindexa docs com updatedAt > embedded_at
+# MODE=all       -> passa em todos (reconstrução)
+# MODE=ids_file  -> reprocessa apenas os _ids do arquivo IDS_FILE
+```
+
+# Busca — corpo de requisição (schema Rodrigo)
+
 ```json
 POST /search
 {
@@ -26,10 +57,12 @@ POST /search
   },
   "top_k": 10
 }
+```
 
 Infra mínima: Qdrant + Search Service (FastAPI) + CI/CD (GitHub Actions -> VPS via SSH).
 
 ## Pré-requisitos na VPS (apenas 1x)
+
 ```bash
 sudo apt update && sudo apt install -y ca-certificates curl gnupg
 curl -fsSL https://get.docker.com | sh
@@ -38,3 +71,4 @@ newgrp docker
 sudo apt install -y docker-compose-plugin || true
 mkdir -p /opt/realestate-search && cd /opt/realestate-search
 # O .env será criado pelo deploy se não existir; edite depois.
+```
