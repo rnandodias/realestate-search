@@ -22,7 +22,6 @@ services:
     networks:
       n8n_net:
         aliases: [search-service]
-    restart: always
 
 networks:
   n8n_net:
