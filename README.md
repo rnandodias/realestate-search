@@ -5,7 +5,12 @@ git push
 
 ---
 
-# RealEstate Search — Passo 1
+# RealEstate Search — Passo 1 (Atlas)
+
+## Observações importantes para bases grandes (~139k docs)
+- **Sanitização de payload**: o ETL converte `NaN`/`+/-Inf` em `null` para evitar `InvalidJSONError` no envio ao Qdrant.
+- **Batching**: tamanho padrão `BATCH_UPSERT=128` (pode ajustar via `.env`).
+- **Custo/latência**: se quiser reduzir, troque `EMBEDDING_MODEL` para `text-embedding-3-small` e `VECTOR_SIZE=1536`.
 
 ## Busca — corpo de requisição (schema Rodrigo)
 ```json
