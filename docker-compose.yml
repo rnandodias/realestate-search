@@ -9,6 +9,7 @@ services:
       - qdrant_data:/qdrant/storage
 
   search-service:
+    container_name: search-service
     build: ./search-service
     restart: unless-stopped
     env_file:
