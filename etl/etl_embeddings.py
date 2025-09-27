@@ -35,8 +35,7 @@ def build_search_corpus(doc: Dict[str, Any]) -> str:
     )
     # Metadados
     parts.append(f"[Status]: {doc.get('status','')}; Portal={doc.get('portal','')}; Seller={doc.get('sellerName','')}/{doc.get('sellerTier','')}")
-    return "
-".join(parts)
+    return "\n".join(parts)
 
 
 def get_embedding(text: str) -> List[float]:
