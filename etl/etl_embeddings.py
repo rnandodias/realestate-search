@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, Any, List
 from pymongo import MongoClient
 import requests
@@ -7,27 +7,36 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-VECTOR_DB_URL  = os.getenv("VECTOR_DB_URL", "http://127.0.0.1:6333")
+OPENAI_API_KEY   = os.getenv("OPENAI_API_KEY")
+MONGODB_URI      = os.getenv("MONGODB_URI")  # mongodb+srv://<user>:<pass>@cluster/...
+DB_NAME          = os.getenv("DB_NAME")
+COLLECTION_NAME  = os.getenv("COLLECTION_NAME")
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "imoveis_v1")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "3072"))
+VECTOR_DB_URL    = os.getenv("VECTOR_DB_URL", "http://127.0.0.1:6333")
+EMBEDDING_MODEL  = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+VECTOR_SIZE      = int(os.getenv("VECTOR_SIZE", "3072"))
 
-DOCDB_URI = os.getenv("DOCDB_URI")
-DB_NAME = os.getenv("DB_NAME")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME")
+# ====== Helpers ======
 
-
-def build_search_corpus(doc: Dict[str,Any]) -> str:
-    ad = doc.get("ad", {})
-    amen = doc.get("amenidades", [])
-    return (
-        f"[Título]: {ad.get('title','')}\n"
-        f"[Descrição]: {ad.get('description','')}\n"
-        f"[Localização]: {doc.get('bairro','')}, {doc.get('cidade','')}, {doc.get('estado','')}\n"
-        f"[Comodidades]: {', '.join(amen)}\n"
-        f"[Detalhes]: {doc.get('quartos')} quartos; {doc.get('banheiros')} banheiros; {doc.get('vagas')} vagas; {doc.get('area_util_m2')} m²\n"
-    ).strip()
+def build_search_corpus(doc: Dict[str, Any]) -> str:
+    """Monta um texto rico usando seu schema (title, description, city, neighborhood, etc.)."""
+    parts = []
+    # Campos textuais principais
+    parts.append(f"[Título]: {doc.get('title','')}")
+    parts.append(f"[Descrição]: {doc.get('description','')}")
+    # Localização
+    loc = f"{doc.get('street','')}, {doc.get('streetNumber','')} - {doc.get('neighborhood','')}, {doc.get('city','')}"
+    parts.append(f"[Localização]: {loc}")
+    # Tipos & uso
+    parts.append(f"[Tipos]: propertyType={doc.get('propertyType','')}; unitType={doc.get('unitType','')}; usageType={doc.get('usageType','')}")
+    # Medidas
+    parts.append(
+        f"[Detalhes]: area={doc.get('usableArea')}; quartos={doc.get('bedrooms')}; banheiros={doc.get('bathrooms')}; preço={doc.get('price')}"
+    )
+    # Metadados
+    parts.append(f"[Status]: {doc.get('status','')}; Portal={doc.get('portal','')}; Seller={doc.get('sellerName','')}/{doc.get('sellerTier','')}")
+    return "
+".join(parts)
 
 
 def get_embedding(text: str) -> List[float]:
@@ -35,7 +44,7 @@ def get_embedding(text: str) -> List[float]:
         "https://api.openai.com/v1/embeddings",
         headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
         json={"model": EMBEDDING_MODEL, "input": text},
-        timeout=60
+        timeout=60,
     )
     r.raise_for_status()
     emb = r.json()["data"][0]["embedding"]
@@ -44,45 +53,81 @@ def get_embedding(text: str) -> List[float]:
     return emb
 
 
-def upsert_qdrant(points: List[Dict[str,Any]]):
-    r = requests.put(
+def ensure_collection_qdrant():
+    import requests as rq
+    # cria coleção se não existir
+    info = rq.get(f"{VECTOR_DB_URL}/collections").json()
+    names = {c["name"] if isinstance(c, dict) else c.get("name") for c in info.get("result", {}).get("collections", [])}
+    if QDRANT_COLLECTION not in names:
+        rq.put(
+            f"{VECTOR_DB_URL}/collections/{QDRANT_COLLECTION}",
+            json={
+                "vectors": {"size": VECTOR_SIZE, "distance": "Cosine"}
+            },
+            timeout=30,
+        ).raise_for_status()
+
+
+def upsert_qdrant(points: List[Dict[str, Any]]):
+    import requests as rq
+    resp = rq.put(
         f"{VECTOR_DB_URL}/collections/{QDRANT_COLLECTION}/points?wait=true",
         json={"points": points},
-        timeout=120
+        timeout=120,
     )
-    r.raise_for_status()
+    resp.raise_for_status()
 
+
+# ====== Main ======
 
 def main():
-    client = MongoClient(DOCDB_URI)
+    ensure_collection_qdrant()
+    client = MongoClient(MONGODB_URI)
     coll = client[DB_NAME][COLLECTION_NAME]
 
-    since = datetime.utcnow() - timedelta(days=1)
-    cursor = coll.find({"updated_at": {"$gte": since}})
+    cursor = coll.find({}, limit=5000)  # ajuste o limite conforme necessário
 
-    batch = []
+    batch: List[Dict[str, Any]] = []
     for doc in cursor:
-        pid = str(doc["_id"])
+        pid = str(doc.get("id") or doc.get("_id"))
         text = build_search_corpus(doc)
         vec = get_embedding(text)
+
         payload = {
-            "imovel_id": pid,
-            "cidade": doc.get("cidade"),
-            "bairro": doc.get("bairro"),
-            "preco": doc.get("preco"),
-            "quartos": doc.get("quartos"),
-            "banheiros": doc.get("banheiros"),
-            "vagas": doc.get("vagas"),
-            "area_util_m2": doc.get("area_util_m2"),
-            "updated_at": datetime.utcnow().isoformat()
+            "id": pid,
+            "portal": doc.get("portal"),
+            "title": doc.get("title"),
+            "description": doc.get("description"),
+            "propertyType": doc.get("propertyType"),
+            "unitType": doc.get("unitType"),
+            "usageType": doc.get("usageType"),
+            "usableArea": doc.get("usableArea"),
+            "bedrooms": doc.get("bedrooms"),
+            "bathrooms": doc.get("bathrooms"),
+            "city": doc.get("city"),
+            "neighborhood": doc.get("neighborhood"),
+            "street": doc.get("street"),
+            "streetNumber": doc.get("streetNumber"),
+            "lat": doc.get("lat"),
+            "lon": doc.get("lon"),
+            "status": doc.get("status"),
+            "sellerName": doc.get("sellerName"),
+            "sellerTier": doc.get("sellerTier"),
+            "link": doc.get("link"),
+            "price": doc.get("price"),
+            "monthlyCondo": doc.get("monthlyCondo"),
+            "yearlyIptu": doc.get("yearlyIptu"),
+            "updated_at": datetime.utcnow().isoformat(),
         }
         batch.append({"id": pid, "vector": vec, "payload": payload})
+
         if len(batch) >= 128:
             upsert_qdrant(batch)
             batch.clear()
 
     if batch:
         upsert_qdrant(batch)
+
 
 if __name__ == "__main__":
     main()

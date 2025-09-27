@@ -4,8 +4,7 @@ from qdrant_client.http import models as qm
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
 COLLECTION = os.getenv("QDRANT_COLLECTION", "imoveis_v1")
-VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "3072"))  # compat c/ text-embedding-3-large
-# Normaliza DISTANCE para enum do Qdrant (COSINE|EUCLID|DOT)
+VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "3072"))
 DISTANCE_ENV = os.getenv("VECTOR_DISTANCE", "COSINE").upper()
 if DISTANCE_ENV not in {"COSINE", "EUCLID", "DOT"}:
     DISTANCE_ENV = "COSINE"
@@ -13,7 +12,6 @@ if DISTANCE_ENV not in {"COSINE", "EUCLID", "DOT"}:
 client = QdrantClient(url=QDRANT_URL)
 
 def ensure_collection():
-    # Cria coleção se não existir (idempotente)
     if COLLECTION not in [c.name for c in client.get_collections().collections]:
         client.create_collection(
             collection_name=COLLECTION,
@@ -27,33 +25,47 @@ def build_filter(payload_filters: dict | None) -> qm.Filter | None:
 
     must: list[qm.FieldCondition] = []
 
-    cidade = payload_filters.get("cidade")
-    if cidade:
-        must.append(qm.FieldCondition(key="cidade", match=qm.MatchValue(value=cidade)))
+    # equals/any
+    city = payload_filters.get("city")
+    if city:
+        must.append(qm.FieldCondition(key="city", match=qm.MatchValue(value=city)))
 
-    bairros = payload_filters.get("bairros")
-    if bairros:
-        must.append(qm.FieldCondition(key="bairro", match=qm.MatchAny(any=bairros)))
+    neighborhoods = payload_filters.get("neighborhoods") or payload_filters.get("neighborhood")
+    if neighborhoods:
+        if isinstance(neighborhoods, list):
+            must.append(qm.FieldCondition(key="neighborhood", match=qm.MatchAny(any=neighborhoods)))
+        else:
+            must.append(qm.FieldCondition(key="neighborhood", match=qm.MatchValue(value=neighborhoods)))
 
-    # Ranges simples
-    def add_range(field: str, rng: dict | None, to_int: bool = False):
+    property_type = payload_filters.get("propertyType")
+    if property_type:
+        must.append(qm.FieldCondition(key="propertyType", match=qm.MatchValue(value=property_type)))
+
+    unit_type = payload_filters.get("unitType")
+    if unit_type:
+        must.append(qm.FieldCondition(key="unitType", match=qm.MatchValue(value=unit_type)))
+
+    usage_type = payload_filters.get("usageType")
+    if usage_type:
+        must.append(qm.FieldCondition(key="usageType", match=qm.MatchValue(value=usage_type)))
+
+    status = payload_filters.get("status")
+    if status:
+        must.append(qm.FieldCondition(key="status", match=qm.MatchValue(value=status)))
+
+    # ranges
+    def add_range(field: str, rng):
         if not rng:
             return
-        gte = int(rng.get("min")) if to_int and rng.get("min") is not None else rng.get("min")
-        lte = int(rng.get("max")) if to_int and rng.get("max") is not None else rng.get("max")
+        gte = rng.get("min")
+        lte = rng.get("max")
         if gte is None and lte is None:
             return
-        must.append(qm.FieldCondition(
-            key=field,
-            range=qm.Range(gte=gte, lte=lte)
-        ))
+        must.append(qm.FieldCondition(key=field, range=qm.Range(gte=gte, lte=lte)))
 
-    add_range("preco", payload_filters.get("orcamento"))
-    add_range("quartos", payload_filters.get("quartos"), to_int=True)
-    add_range("banheiros", payload_filters.get("banheiros"), to_int=True)
-    add_range("vagas", payload_filters.get("vagas"), to_int=True)
-    add_range("area_util_m2", payload_filters.get("area_util_m2"))
+    add_range("price", payload_filters.get("price"))
+    add_range("usableArea", payload_filters.get("usableArea"))
+    add_range("bedrooms", payload_filters.get("bedrooms"))
+    add_range("bathrooms", payload_filters.get("bathrooms"))
 
-    if not must:
-        return None
-    return qm.Filter(must=must)
+    return qm.Filter(must=must) if must else None

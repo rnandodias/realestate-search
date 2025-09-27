@@ -30,7 +30,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           port: ${{ secrets.VPS_PORT }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: OPENAI_API_KEY,EMBEDDING_MODEL,VECTOR_SIZE,QDRANT_URL,QDRANT_COLLECTION,DOCDB_URI,DB_NAME,COLLECTION_NAME,VECTOR_DB_URL,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
+          envs: OPENAI_API_KEY,EMBEDDING_MODEL,VECTOR_SIZE,QDRANT_URL,QDRANT_COLLECTION,MONGODB_URI,DB_NAME,COLLECTION_NAME,VECTOR_DB_URL,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
             set -e
             cd /opt/realestate-search
@@ -43,8 +43,7 @@ jobs:
               apt-get update && apt-get install -y docker-compose-plugin || true
             fi
 
-            # Sanity check
-            required=(OPENAI_API_KEY EMBEDDING_MODEL VECTOR_SIZE QDRANT_URL QDRANT_COLLECTION DOCDB_URI DB_NAME COLLECTION_NAME VECTOR_DB_URL)
+            required=(OPENAI_API_KEY EMBEDDING_MODEL VECTOR_SIZE QDRANT_URL QDRANT_COLLECTION MONGODB_URI DB_NAME COLLECTION_NAME VECTOR_DB_URL)
             for v in "${required[@]}"; do
               if [ -z "${!v}" ]; then
                 echo "[ERRO] Secret $v não definido no GitHub Actions." >&2
@@ -52,27 +51,23 @@ jobs:
               fi
             done
 
-            # .env
             cat > .env <<EOF
             OPENAI_API_KEY=${OPENAI_API_KEY}
             EMBEDDING_MODEL=${EMBEDDING_MODEL}
             VECTOR_SIZE=${VECTOR_SIZE}
             QDRANT_URL=${QDRANT_URL}
             QDRANT_COLLECTION=${QDRANT_COLLECTION}
-            DOCDB_URI=${DOCDB_URI}
+            MONGODB_URI=${MONGODB_URI}
             DB_NAME=${DB_NAME}
             COLLECTION_NAME=${COLLECTION_NAME}
             VECTOR_DB_URL=${VECTOR_DB_URL}
             EOF
 
-            # Login Docker Hub (evita rate limit)
             if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
               echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || true
             fi
 
-            # Pre-pull direto do Docker Hub para evitar mismatch de registry/tag
             docker pull qdrant/qdrant:v1.11.0 || true
-
             docker compose up -d --build
             docker ps --format '{{.Names}} -> {{.Status}}'
         env:
@@ -81,7 +76,7 @@ jobs:
           VECTOR_SIZE: ${{ secrets.VECTOR_SIZE }}
           QDRANT_URL: ${{ secrets.QDRANT_URL }}
           QDRANT_COLLECTION: ${{ secrets.QDRANT_COLLECTION }}
-          DOCDB_URI: ${{ secrets.DOCDB_URI }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
           DB_NAME: ${{ secrets.DB_NAME }}
           COLLECTION_NAME: ${{ secrets.COLLECTION_NAME }}
           VECTOR_DB_URL: ${{ secrets.VECTOR_DB_URL }}

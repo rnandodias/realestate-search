@@ -1,11 +1,26 @@
-# RealEstate Search — Passo 1
-
 ## Subindo Alterações
 git add -A
 git commit -m "Testando GitHub Actions"
 git push
 
 ---
+
+# RealEstate Search — Passo 1
+
+## Busca — corpo de requisição (schema Rodrigo)
+```json
+POST /search
+{
+  "query_text": "terreno no Mendanha em Campo Grande RJ até 80 mil",
+  "filters": {
+    "city": "Rio de Janeiro",
+    "neighborhoods": ["Campo Grande"],
+    "unitType": "ALLOTMENT_LAND",
+    "usageType": "RESIDENTIAL",
+    "price": {"min": 0, "max": 80000}
+  },
+  "top_k": 10
+}
 
 Infra mínima: Qdrant + Search Service (FastAPI) + CI/CD (GitHub Actions -> VPS via SSH).
 
