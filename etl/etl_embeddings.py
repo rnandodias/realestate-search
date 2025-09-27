@@ -1,8 +1,9 @@
 import os
 import math
 import json
+import uuid
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union
 
 import requests
 from pymongo import MongoClient
@@ -23,22 +24,18 @@ BATCH_UPSERT      = int(os.getenv("BATCH_UPSERT", "128"))
 # ========= Helpers =========
 
 def build_search_corpus(doc: Dict[str, Any]) -> str:
-    """Monta um texto rico com os campos do seu schema (melhor contexto pro embedding)."""
     parts = []
     parts.append(f"[Título]: {doc.get('title','')}")
     parts.append(f"[Descrição]: {doc.get('description','')}")
     loc = f"{doc.get('street','')}, {doc.get('streetNumber','')} - {doc.get('neighborhood','')}, {doc.get('city','')}"
     parts.append(f"[Localização]: {loc}")
     parts.append(f"[Tipos]: propertyType={doc.get('propertyType','')}; unitType={doc.get('unitType','')}; usageType={doc.get('usageType','')}")
-    parts.append(
-        f"[Detalhes]: area={doc.get('usableArea')}; quartos={doc.get('bedrooms')}; banheiros={doc.get('bathrooms')}; preço={doc.get('price')}"
-    )
+    parts.append(f"[Detalhes]: area={doc.get('usableArea')}; quartos={doc.get('bedrooms')}; banheiros={doc.get('bathrooms')}; preço={doc.get('price')}")
     parts.append(f"[Status]: {doc.get('status','')}; Portal={doc.get('portal','')}; Seller={doc.get('sellerName','')}/{doc.get('sellerTier','')}")
     return "\n".join(parts)
 
 
 def _clean_value(v: Any):
-    """Converte NaN/Inf para None e limpa recursivamente listas/dicts para JSON válido."""
     if isinstance(v, dict):
         return {k: _clean_value(vv) for k, vv in v.items()}
     if isinstance(v, list):
@@ -50,7 +47,7 @@ def _clean_value(v: Any):
 
 def build_payload(doc: Dict[str, Any]) -> Dict[str, Any]:
     payload = {
-        "id": str(doc.get("id") or doc.get("_id")),
+        "src_id": str(doc.get("_id")),  # preserva _id original
         "portal": doc.get("portal"),
         "title": doc.get("title"),
         "description": doc.get("description"),
@@ -76,6 +73,21 @@ def build_payload(doc: Dict[str, Any]) -> Dict[str, Any]:
         "updated_at": datetime.utcnow().isoformat(),
     }
     return _clean_value(payload)
+
+
+def to_point_id(raw: Any) -> Union[int, str]:
+    """Qdrant aceita ID inteiro ou UUID string.
+    Usaremos SEMPRE um UUIDv5 determinístico baseado no _id do MongoDB.
+    """
+    if raw is None:
+        return str(uuid.uuid4())
+    s = str(raw)
+    # Se já for UUID, use direto
+    try:
+        return str(uuid.UUID(s))
+    except Exception:
+        # Gera UUID5 determinístico com namespace OID (estável e reproduzível)
+        return str(uuid.uuid5(uuid.NAMESPACE_OID, s))
 
 
 def get_embedding(text: str) -> List[float]:
@@ -111,7 +123,13 @@ def upsert_qdrant(points: List[Dict[str, Any]]):
         json={"points": points},
         timeout=120,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        print("[qdrant] status=", resp.status_code)
+        try:
+            print("[qdrant] body=", resp.json())
+        except Exception:
+            print("[qdrant] text=", resp.text)
+        resp.raise_for_status()
 
 
 # ========= Main =========
@@ -123,7 +141,7 @@ def main():
     coll = client[DB_NAME][COLLECTION_NAME]
 
     projection = {
-        "id": 1,
+        "_id": 1,
         "portal": 1,
         "title": 1,
         "description": 1,
@@ -154,26 +172,20 @@ def main():
     processed = 0
 
     for doc in cursor:
-        pid = str(doc.get("id") or doc.get("_id"))
+        raw_id = doc.get("_id")  # usa SEMPRE o _id do MongoDB; ignore campo 'id' externo
+        pid = to_point_id(raw_id)
         text = build_search_corpus(doc)
         try:
             vec = get_embedding(text)
         except Exception as e:
-            # Loga e continua — não para o ETL por um doc ruim
-            print(f"[warn] embedding falhou para id={pid}: {e}")
+            print(f"[warn] embedding falhou para _id={raw_id}: {e}")
             continue
 
         payload = build_payload(doc)
         batch.append({"id": pid, "vector": vec, "payload": payload})
 
         if len(batch) >= BATCH_UPSERT:
-            try:
-                upsert_qdrant(batch)
-            except requests.exceptions.InvalidJSONError as e:
-                # Salva amostra para debug
-                with open("/work/etl_bad_batch_sample.json", "w") as f:
-                    json.dump(batch[:3], f, ensure_ascii=False)
-                raise
+            upsert_qdrant(batch)
             batch.clear()
             processed += BATCH_UPSERT
             if processed % 1024 == 0:
