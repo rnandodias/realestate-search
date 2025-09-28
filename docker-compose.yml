@@ -7,6 +7,8 @@ services:
       - "127.0.0.1:6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    networks:
+      - default
 
   search-service:
     container_name: search-service
@@ -28,4 +30,3 @@ volumes:
 networks:
   svc_net:
     external: true                            # <— usa a rede já criada no host
-    name: root_default                        # REDE_EXISTENTE preenchida
