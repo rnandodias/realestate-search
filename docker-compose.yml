@@ -28,3 +28,4 @@ volumes:
 networks:
   svc_net:
     external: true                            # <— usa a rede já criada no host
+    name: root_default                        # REDE_EXISTENTE preenchida
