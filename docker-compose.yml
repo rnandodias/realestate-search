@@ -16,6 +16,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+    - SEARCH_API_KEY=${SEARCH_API_KEY}
     depends_on:
       - qdrant
     ports:

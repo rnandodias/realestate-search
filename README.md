@@ -62,7 +62,6 @@ POST /search
 
 
 curl -s -X POST http://127.0.0.1:8080/search \
-curl -s -X POST http://search-service:8080/search \
     -H 'Content-Type: application/json' \
     -d '{"query_text":"Quero apê 2 quartos na Barra da Tijuca próximo do metrô","filters":{"cidade":"Rio de Janeiro"},"top_k":5}' | jq
 

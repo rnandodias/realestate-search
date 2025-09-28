@@ -6,7 +6,7 @@ class Range(BaseModel):
     max: Optional[float] = None
 
 class Filters(BaseModel):
-    intent: Optional[str] = None  # "alugar" | "comprar"
+    intent: Optional[str] = None
     cidade: Optional[str] = None
     bairros: Optional[List[str]] = None
     orcamento: Optional[Range] = None
@@ -24,8 +24,10 @@ class UpsertItem(BaseModel):
 
 class SearchRequest(BaseModel):
     query_text: str
-    filters: Optional[Filters] = None
-    top_k: int = 10
+    filters: Optional[Dict[str, Any]] = None  # usamos dict genérico no build_filter
+    top_k: int = 10                            # compatibilidade
+    offset: int = 0                            # novo
+    limit: Optional[int] = None                # novo
 
 class SearchResult(BaseModel):
     id: str
@@ -34,3 +36,4 @@ class SearchResult(BaseModel):
 
 class SearchResponse(BaseModel):
     results: List[SearchResult]
+    next_offset: Optional[int] = None
