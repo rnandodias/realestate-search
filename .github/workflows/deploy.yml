@@ -3,16 +3,10 @@ name: Deploy to VPS (Hostinger)
 on:
   push:
     branches: ["main"]
-  workflow_dispatch:
-
-concurrency:
-  group: deploy-prod
-  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,28 +25,15 @@ jobs:
 
       - name: Remote deploy (docker compose up)
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
-          VECTOR_SIZE: ${{ secrets.VECTOR_SIZE }}
-          QDRANT_URL: ${{ secrets.QDRANT_URL }}
-          QDRANT_COLLECTION: ${{ secrets.QDRANT_COLLECTION }}
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          COLLECTION_NAME: ${{ secrets.COLLECTION_NAME }}
-          VECTOR_DB_URL: ${{ secrets.VECTOR_DB_URL }}
-          SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           port: ${{ secrets.VPS_PORT }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: OPENAI_API_KEY,EMBEDDING_MODEL,VECTOR_SIZE,QDRANT_URL,QDRANT_COLLECTION,MONGODB_URI,DB_NAME,COLLECTION_NAME,VECTOR_DB_URL,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
             set -e
             cd /opt/realestate-search
-
             rm -rf .git .github/.DS_Store || true
 
             if ! command -v docker >/dev/null 2>&1; then
@@ -62,17 +43,7 @@ jobs:
               apt-get update && apt-get install -y docker-compose-plugin || true
             fi
 
-            # cria rede externa se não existir
-            if ! docker network inspect svc_net >/dev/null 2>&1; then
-              echo "[net] criando rede externa svc_net…"
-              docker network create svc_net
-            else
-              echo "[net] rede externa svc_net já existe."
-            fi
-            docker network ls
-
-            # sanity check
-            required=(OPENAI_API_KEY EMBEDDING_MODEL VECTOR_SIZE QDRANT_URL QDRANT_COLLECTION MONGODB_URI DB_NAME COLLECTION_NAME VECTOR_DB_URL SEARCH_API_KEY)
+            required=(OPENAI_API_KEY EMBEDDING_MODEL VECTOR_SIZE QDRANT_URL QDRANT_COLLECTION MONGODB_URI DB_NAME COLLECTION_NAME VECTOR_DB_URL)
             for v in "${required[@]}"; do
               if [ -z "${!v}" ]; then
                 echo "[ERRO] Secret $v não definido no GitHub Actions." >&2
@@ -80,7 +51,6 @@ jobs:
               fi
             done
 
-            # gera .env
             cat > .env <<EOF
             OPENAI_API_KEY=${OPENAI_API_KEY}
             EMBEDDING_MODEL=${EMBEDDING_MODEL}
@@ -91,24 +61,24 @@ jobs:
             DB_NAME=${DB_NAME}
             COLLECTION_NAME=${COLLECTION_NAME}
             VECTOR_DB_URL=${VECTOR_DB_URL}
-            SEARCH_API_KEY=${SEARCH_API_KEY}
             EOF
 
             if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
               echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || true
             fi
 
+            docker pull qdrant/qdrant:v1.11.0 || true
             docker compose up -d --build
-
-            docker compose ps
             docker ps --format '{{.Names}} -> {{.Status}}'
-
-            # health check do search-service
-            echo "[health] aguardando search-service responder…"
-            for i in {1..30}; do
-              if curl -fsS http://127.0.0.1:8080/health >/dev/null; then
-                echo "[health] OK"; break
-              fi
-              sleep 2
-            done
-            curl -fsS http://127.0.0.1:8080/health || (echo "[health] FAIL" && exit 1)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
+          VECTOR_SIZE: ${{ secrets.VECTOR_SIZE }}
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_COLLECTION: ${{ secrets.QDRANT_COLLECTION }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          COLLECTION_NAME: ${{ secrets.COLLECTION_NAME }}
+          VECTOR_DB_URL: ${{ secrets.VECTOR_DB_URL }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
