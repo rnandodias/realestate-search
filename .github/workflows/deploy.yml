@@ -32,7 +32,6 @@ jobs:
       - name: Remote deploy (docker compose up)
         uses: appleboy/ssh-action@v1.0.3
         env:
-          # ==== Secrets obrigatórios ====
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
           VECTOR_SIZE: ${{ secrets.VECTOR_SIZE }}
@@ -43,7 +42,6 @@ jobs:
           COLLECTION_NAME: ${{ secrets.COLLECTION_NAME }}
           VECTOR_DB_URL: ${{ secrets.VECTOR_DB_URL }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
-          # ==== Opcional: evitar rate limit no Docker Hub ====
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
@@ -55,10 +53,8 @@ jobs:
             set -e
             cd /opt/realestate-search
 
-            # limpeza opcional de lixo do git
             rm -rf .git .github/.DS_Store || true
 
-            # instala docker e compose se faltar
             if ! command -v docker >/dev/null 2>&1; then
               curl -fsSL https://get.docker.com | sh
             fi
@@ -66,10 +62,16 @@ jobs:
               apt-get update && apt-get install -y docker-compose-plugin || true
             fi
 
-            # cria rede externa compartilhada (idempotente)
-            docker network create svc_net || true
+            # cria rede externa se não existir
+            if ! docker network inspect svc_net >/dev/null 2>&1; then
+              echo "[net] criando rede externa svc_net…"
+              docker network create svc_net
+            else
+              echo "[net] rede externa svc_net já existe."
+            fi
+            docker network ls
 
-            # sanity check dos secrets
+            # sanity check
             required=(OPENAI_API_KEY EMBEDDING_MODEL VECTOR_SIZE QDRANT_URL QDRANT_COLLECTION MONGODB_URI DB_NAME COLLECTION_NAME VECTOR_DB_URL SEARCH_API_KEY)
             for v in "${required[@]}"; do
               if [ -z "${!v}" ]; then
@@ -78,42 +80,35 @@ jobs:
               fi
             done
 
-            # gera .env com valores EXPANDIDOS
+            # gera .env
             cat > .env <<EOF
             OPENAI_API_KEY=${OPENAI_API_KEY}
             EMBEDDING_MODEL=${EMBEDDING_MODEL}
             VECTOR_SIZE=${VECTOR_SIZE}
-
-            # Qdrant
             QDRANT_URL=${QDRANT_URL}
             QDRANT_COLLECTION=${QDRANT_COLLECTION}
-
-            # MongoDB Atlas
             MONGODB_URI=${MONGODB_URI}
             DB_NAME=${DB_NAME}
             COLLECTION_NAME=${COLLECTION_NAME}
-
-            # Acesso HTTP local ao Qdrant (para ETL)
             VECTOR_DB_URL=${VECTOR_DB_URL}
-
-            # API key exigida nos endpoints protegidos (/search, /upsert)
             SEARCH_API_KEY=${SEARCH_API_KEY}
             EOF
 
-            # login docker hub (opcional)
             if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
               echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin || true
             fi
 
-            # sobe/atualiza os serviços
             docker compose up -d --build
 
-            # garante que search-service e n8n possam falar via svc_net
-            # (se o compose já declara networks: [svc_net], isso é desnecessário; manter por segurança)
-            if docker ps --format '{{.Names}}' | grep -q '^search-service$'; then
-              docker network connect svc_net search-service 2>/dev/null || true
-            fi
-
-            # status
             docker compose ps
             docker ps --format '{{.Names}} -> {{.Status}}'
+
+            # health check do search-service
+            echo "[health] aguardando search-service responder…"
+            for i in {1..30}; do
+              if curl -fsS http://127.0.0.1:8080/health >/dev/null; then
+                echo "[health] OK"; break
+              fi
+              sleep 2
+            done
+            curl -fsS http://127.0.0.1:8080/health || (echo "[health] FAIL" && exit 1)
