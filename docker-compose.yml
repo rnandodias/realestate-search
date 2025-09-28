@@ -18,6 +18,14 @@ services:
       - qdrant
     ports:
       - "127.0.0.1:8080:8080"
-
+    networks:
+      - default
+      - n8n_net
+      - svc_net                               # <— entra na rede compartilhada
+      
 volumes:
   qdrant_data:
+
+networks:
+  svc_net:
+    external: true                            # <— usa a rede já criada no host
