@@ -10,6 +10,7 @@ class Filters(BaseModel):
     # categorical
     city: Optional[str] = None
     neighborhoods: Optional[List[str]] = None
+    street: Optional[List[str]] = None
     propertyType: Optional[List[str]] = None  # e.g., ["Unidade"]
     unitType: Optional[List[str]] = None      # e.g., ["Apartamento"]
     usageType: Optional[List[str]] = None     # e.g., ["Residencial"]

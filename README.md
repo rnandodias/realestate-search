@@ -61,10 +61,33 @@ POST /search
 
 
 
-curl -s -X POST http://search-service:8080/search \
+curl -s -X POST http://127.0.0.1:8080/search \
     -H 'Content-Type: application/json' \
-    -d '{"query_text":"Quero apê 2 quartos na Barra da Tijuca próximo do metrô","filters":{"city":"Rio de Janeiro"},"top_k":5}' | jq
+    -d '{"query_text":"Quero apê 2 quartos na Barra da Tijuca próximo do metrô","filters":{"city":"Rio de Janeiro","neighborhoods": ["Barra da Tijuca"],"propertyType": ["Apartamento"]},"top_k":5}' | jq
 
+{"query_text": "Apartamento de três quartos na Avenida General San Martín, no Leblon.","filters": {"city": "rio de janeiro","neighborhoods": ["Leblon"],"propertyType": ["Apartamento"],"bedrooms": {"min": 3,"max": 3}},"top_k": 5}
+
+search_example = {
+  "query_text": "quero um apartamento residencial com 3 quartos e 1 suíte na Barra Olímpica, até 700 mil, com elevador e piscina",
+  "filters": {
+    "city": "rio de janeiro",
+    "neighborhoods": ["Barra Olímpica"],
+    "propertyType": ["Unidade"],
+    "unitType": ["Apartamento"],
+    "usageType": ["Residencial"],
+    "price": { "min": None, "max": 700000 },
+    "usableArea": { "min": 70, "max": 100 },
+    "totalArea": { "min": None, "max": None },
+    "bedrooms": { "min": 3, "max": 3 },
+    "bathrooms": { "min": 2, "max": None },
+    "suites": { "min": 1, "max": None },
+    "parkingSpaces": { "min": 1, "max": None },
+    "amenities": ["elevador", "piscina adulto"],
+    "status": ["active"],
+    "sellerTier": ["gold", "diamond"]
+  },
+  "top_k": 10
+}
 
 Infra mínima: Qdrant + Search Service (FastAPI) + CI/CD (GitHub Actions -> VPS via SSH).
 

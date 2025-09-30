@@ -111,6 +111,7 @@ def build_payload(doc: Dict[str, Any]) -> Dict[str, Any]:
     payload.update({
         "city_lc": _lc(doc.get("city")),
         "neighborhood_lc": _lc(doc.get("neighborhood")),
+        "street_lc": _lc(doc.get("street")),
         "propertyType_lc": _lc(doc.get("propertyType")),
         "unitType_lc": _lc(doc.get("unitType")),
         "usageType_lc": _lc(doc.get("usageType")),

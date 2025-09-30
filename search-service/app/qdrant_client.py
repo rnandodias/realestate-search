@@ -58,11 +58,13 @@ def build_filter(payload_filters: dict | None) -> qm.Filter | None:
         if v:
             must.append(qm.FieldCondition(key=key_lc, match=qm.MatchValue(value=v)))
 
-    # city / neighborhoods
+    # city / neighborhoods / street
     if f.get("city"):
         match_val("city_lc", f.get("city"))
     if f.get("neighborhoods"):
         match_any("neighborhood_lc", f.get("neighborhoods"))
+    if f.get("street"):
+        match_any("street_lc", f.get("street"))
 
     # property/unit/usage/status/sellerTier
     if f.get("propertyType"):
