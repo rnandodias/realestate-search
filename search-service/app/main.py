@@ -1,7 +1,7 @@
 import os
 import requests
-from fastapi import FastAPI, HTTPException, Header, Depends
-from typing import List, Optional
+from fastapi import FastAPI, HTTPException
+from typing import List
 from .schemas import UpsertItem, SearchRequest, SearchResponse, SearchResult
 from .qdrant_client import client, ensure_collection, build_filter, COLLECTION
 from qdrant_client.http import models as qm
@@ -9,7 +9,6 @@ from qdrant_client.http import models as qm
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "3072"))
-SEARCH_API_KEY = os.getenv("SEARCH_API_KEY")  # << novo
 
 app = FastAPI(title="RealEstate Search Service", version="0.2.0")
 
@@ -21,15 +20,6 @@ def startup_event():
 def health():
     return {"status": "ok", "collection": COLLECTION, "embedding_model": EMBEDDING_MODEL}
 
-def require_api_key(x_api_key: Optional[str] = Header(default=None)):
-    """
-    Se SEARCH_API_KEY não estiver definido no ambiente, não exigimos header (modo dev).
-    Se estiver definido, validamos o header X-API-Key.
-    """
-    if not SEARCH_API_KEY:
-        return
-    if x_api_key != SEARCH_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 def get_embedding(text: str) -> List[float]:
     if not OPENAI_API_KEY:
@@ -47,7 +37,7 @@ def get_embedding(text: str) -> List[float]:
         raise HTTPException(status_code=500, detail=f"Dimensão do embedding ({len(emb)}) difere do VECTOR_SIZE ({VECTOR_SIZE})")
     return emb
 
-@app.post("/upsert", dependencies=[Depends(require_api_key)])
+@app.post("/upsert")
 def upsert(item: UpsertItem):
     vec = get_embedding(item.text)
     client.upsert(
@@ -56,28 +46,19 @@ def upsert(item: UpsertItem):
     )
     return {"status": "ok", "id": item.id}
 
-@app.post("/search", response_model=SearchResponse, dependencies=[Depends(require_api_key)])
+@app.post("/search", response_model=SearchResponse)
 def search(req: SearchRequest):
     vec = get_embedding(req.query_text)
-    qfilter = build_filter(req.filters or None)
-
-    # paginação: compat top_k + novos limit/offset
-    offset = max(0, int(req.offset or 0))
-    limit = int(req.limit or req.top_k or 10)
-    limit = min(max(limit, 1), 100)  # clamp 1..100
-
+    qfilter = build_filter(req.filters.dict() if req.filters else None)
     res = client.search(
         collection_name=COLLECTION,
         query_vector=vec,
-        limit=limit,
-        offset=offset,
+        limit=min(max(req.top_k, 1), 50),
         query_filter=qfilter
     )
-
-    results = [
-        SearchResult(id=str(p.id), score=float(p.score), payload=p.payload or {})
-        for p in res
-    ]
-    next_off = offset + len(results) if len(results) == limit else None
-
-    return SearchResponse(results=results, next_offset=next_off)
+    return SearchResponse(
+        results=[
+            SearchResult(id=str(p.id), score=float(p.score), payload=p.payload or {})
+            for p in res
+        ]
+    )
